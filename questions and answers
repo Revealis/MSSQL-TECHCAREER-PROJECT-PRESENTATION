@@ -1,0 +1,245 @@
+1)Northwind veritabanında toplam kaç tablo vardır? Bu tabloların isimlerini listeleyiniz.
+2)Her sipariş (Orders) için, Şirket adı (CompanyName), çalışan adı (Employee Full Name), sipariş tarihi ve
+gönderici şirketin adı (Shipper) ile birlikte bir liste çıkarın.
+3)Tüm siparişlerin toplam tutarını bulun. (Order Details tablosundaki Quantity UnitPrice üzerinden
+hesaplayınız)
+4)Hangi ülkeden kaç müşteri vardır?
+5)En pahalı ürünün adını ve fiyatını listeleyiniz.
+6)Çalışan başına düşen sipariş sayısını gösteren bir liste çıkarınız.
+7)1997 yılında verilen siparişleri listeleyin
+8)Ürünleri fiyat aralıklarına göre kategorilere ayırarak listeleyin: 020 → Ucuz, 2050 → Orta, 50+ → Pahalı.
+9)En çok sipariş verilen ürünün adını ve sipariş adedini (adet bazında) bulun.
+10)Ürünler ve kategoriler bilgilerini birleştiren bir görünüm (view) oluşturun.
+11)Ürün silindiğinde log tablosuna kayıt yapan bir trigger yazınız.
+12)Belirli bir ülkeye ait müşterileri listeleyen bir stored procedure yazınız.
+13)Tüm ürünlerin tedarikçileriyle (suppliers) birlikte listesini yapın. Tedarikçisi olmayan ürünler de listelensin
+14)Fiyatı ortalama fiyatın üzerinde olan ürünleri listeleyin.
+15)Sipariş detaylarına göre en çok ürün satan çalışan kimdir?
+16)Stok miktarı 10’un altında olan ürünleri listeleyiniz.
+17)Her müşteri şirketinin yaptığı sipariş sayısını ve toplam harcamasını bulun.
+18)Hangi ülkede en fazla müşteri var?
+19)Siparişlerde kaç farklı ürün olduğu bilgisini listeleyin.
+20)Her kategoriye göre ortalama ürün fiyatını bulun.
+21)Siparişleri ay ay gruplayarak kaç sipariş olduğunu listeleyin.
+22)Her çalışanın ilgilendiği müşteri sayısını listeleyin.
+23)Hiç siparişi olmayan müşterileri listeleyin.
+24)Nakliye maliyetine göre en pahalı 5 siparişi listeleyin.
+
+
+CEVAPLAR
+
+
+1)
+  
+SELECT COUNT(*) AS "Tablo Sayısı" FROM INFORMATION_SCHEMA.TABLES;
+SELECT TABLE_NAME as "Tablo İsimleri" FROM INFORMATION_SCHEMA.TABLES;
+
+2)
+
+SELECT o.OrderID, c.CompanyName, 
+       e.FirstName + ' ' + e.LastName AS "İşçi Adı-Soyadı", 
+       o.OrderDate, s.CompanyName AS "Gönderici Şirket"
+FROM Orders o
+JOIN Customers c ON o.CustomerID = c.CustomerID
+JOIN Employees e ON o.EmployeeID = e.EmployeeID
+JOIN Shippers s ON o.ShipVia = s.ShipperID;
+
+3)
+
+SELECT SUM(od.Quantity * od.UnitPrice) AS "Tüm Sipariş Tutarı" 
+FROM nortwind.dbo.[Order Details] od;
+
+4)
+
+SELECT Country, COUNT(*) AS "Müşteri Sayısı"
+FROM Customers 
+GROUP BY Country;
+
+5)
+
+SELECT TOP 1 ProductName, UnitPrice 
+FROM Products 
+ORDER BY UnitPrice DESC;
+
+SELECT ProductName AS "Ürün Adı", MAX(UnitPrice) AS "Birim Fiyatı" From Products
+GROUP BY ProductName
+ORDER BY MAX(UnitPrice) DESC
+OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY;
+
+
+6)
+
+SELECT e.FirstName + ' ' + e.LastName AS "İşçi Adı-Soyadı", COUNT(o.OrderID) AS "Sipariş Sayısı"
+FROM Employees e
+LEFT JOIN Orders o ON e.EmployeeID = o.EmployeeID
+GROUP BY e.FirstName, e.LastName;
+
+7)
+
+SELECT * FROM Orders WHERE YEAR(OrderDate) = 1997;
+
+SELECT * FROM Orders WHERE RequiredDate between '1997-01-01' and '1997-12-31';
+
+8)
+
+SELECT ProductName as "Ürün Adı", UnitPrice as "Birim Fiyat", 
+       CASE 
+           WHEN UnitPrice < 20 THEN 'Ucuz'
+           WHEN UnitPrice BETWEEN 20 AND 50 THEN 'Orta'
+           ELSE 'Pahalı'
+       END AS "Kategorisi"
+FROM Products;
+
+9)
+
+SELECT TOP 1 p.ProductName as "Ürün Adı", SUM(od.Quantity) AS "Toplam Miktar"
+FROM [Order Details] od
+JOIN Products p ON od.ProductID = p.ProductID
+GROUP BY p.ProductName
+ORDER BY "Toplam Miktar" DESC;
+
+SELECT p.ProductName as "Ürün Adı", SUM(od.Quantity) AS "Toplam Miktar"
+FROM [Order Details] od
+JOIN Products p ON od.ProductID = p.ProductID
+GROUP BY p.ProductName
+ORDER BY "Toplam Miktar" DESC
+OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY;
+
+10)
+
+
+CREATE VIEW URUNKATEGORİ AS
+SELECT p.ProductName, p.UnitPrice, c.CategoryName
+FROM Products p
+JOIN Categories c ON p.CategoryID = c.CategoryID;
+
+SELECT * FROM URUNKATEGORİ;
+DROP VIEW URUNKATEGORİ;
+
+11)
+
+CREATE TABLE ProductLog (ProductID INT, DeletedAt DATETIME DEFAULT GETDATE());
+
+CREATE TRIGGER trg_ProductDelete
+ON Products
+AFTER DELETE
+AS
+INSERT INTO ProductLog (ProductID)
+SELECT ProductID FROM deleted;
+
+DROP TABLE ProductLog;
+SELECT * FROM ProductLog;
+DROP TRIGGER trg_ProductDelete;
+SELECT name FROM sys.triggers;
+
+12)
+
+CREATE PROCEDURE GetCustomersByCountry @Country NVARCHAR(50)
+AS
+SELECT * FROM Customers WHERE Country = @Country;
+
+
+EXEC GetCustomersByCountry @Country = 'Germany';
+EXEC GetCustomersByCountry 'Germany';
+
+SELECT name 
+FROM sys.objects 
+WHERE type = 'P';
+
+DROP PROCEDURE GetCustomersByCountry;
+
+13)
+
+SELECT p.ProductName as 'Ürün Adı', s.CompanyName AS 'Tedarikçi'
+FROM Products p
+LEFT JOIN Suppliers s ON p.SupplierID = s.SupplierID;
+
+SELECT p.ProductName as 'Ürün Adı', s.CompanyName AS 'Tedarikçi'
+FROM Suppliers s
+RIGHT JOIN Products p ON p.SupplierID = s.SupplierID;
+
+
+
+14)
+
+SELECT ProductName AS 'Ürün Adı', UnitPrice as 'Birim Fiyat'
+FROM Products 
+WHERE UnitPrice > (SELECT AVG(UnitPrice) FROM Products);
+
+15)
+
+SELECT TOP 1 e.FirstName + ' ' + e.LastName AS 'işçi Adı-Soyadı', SUM(od.Quantity) AS 'Toplam Satış'
+FROM Orders o
+JOIN Employees e ON o.EmployeeID = e.EmployeeID
+JOIN [Order Details] od ON o.OrderID = od.OrderID
+GROUP BY e.FirstName, e.LastName
+ORDER BY 'Toplam Satış' DESC;  
+
+
+16)
+
+SELECT ProductName AS 'Ürün Adı', UnitsInStock 'Birim Stok'
+FROM Products 
+WHERE UnitsInStock < 10
+ORDER BY UnitsInStock DESC;
+
+17)
+
+SELECT c.CompanyName, COUNT(o.OrderID) AS OrderCount, 
+       SUM(od.Quantity * od.UnitPrice) AS TotalSpent
+FROM Customers c
+JOIN Orders o ON c.CustomerID = o.CustomerID
+JOIN [Order Details] od ON o.OrderID = od.OrderID
+GROUP BY c.CompanyName;
+
+
+18)
+
+SELECT Country 'Ülke', COUNT(*) AS 'Müşteri Sayısı'
+FROM Customers
+GROUP BY Country
+ORDER BY 'Müşteri Sayısı' DESC;
+
+19)
+
+SELECT COUNT(DISTINCT ProductID) AS 'Benzersiz Ürün Sayısı'
+FROM [Order Details];
+
+20)
+
+SELECT c.CategoryName as 'Kategori Adı', ROUND(AVG(p.UnitPrice), 2) AS 'Ortalama Tutar'
+FROM Products p
+JOIN Categories c ON p.CategoryID = c.CategoryID
+GROUP BY c.CategoryName;
+
+21)
+
+SELECT YEAR(OrderDate) AS 'Sipariş Yılı', MONTH(OrderDate) AS 'Sipariş Ayı', COUNT(*) AS 'Sipariş Miktarı'
+FROM Orders
+GROUP BY YEAR(OrderDate), MONTH(OrderDate)
+ORDER BY 'Sipariş Yılı', 'Sipariş Ayı';
+
+22)
+
+SELECT e.FirstName + ' ' + e.LastName AS 'İşçi Adı-Soyadı', COUNT(DISTINCT o.CustomerID) AS 'Müşteri Sayısı'
+FROM Employees e
+JOIN Orders o ON e.EmployeeID = o.EmployeeID
+GROUP BY e.FirstName, e.LastName
+ORDER BY e.FirstName, e.LastName;
+
+
+23)
+
+SELECT c.CustomerID, c.CompanyName AS 'Şirket Adı'
+FROM Customers c
+LEFT JOIN Orders o ON c.CustomerID = o.CustomerID
+WHERE o.OrderID IS NULL;
+
+24)
+
+SELECT TOP 5 CustomerID , OrderID, Freight as 'Nakliye Maliyeti'
+FROM Orders 
+ORDER BY 'Nakliye Maaliyeti' DESC;
+
+
+
